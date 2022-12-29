@@ -1,0 +1,10 @@
+[Unit]
+Description=apply keyboard repeat rate for each new device
+BindsTo=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/xautocfg
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target
