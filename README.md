@@ -9,9 +9,10 @@ Features:
 
 ## Setup
 
-### installation
+### Installation
 
 dependencies:
+- `C++20`
 - `libX11`
 - `libXi`
 
@@ -26,7 +27,7 @@ You should install `xautocfg` through your linux distribution, so that all neces
 Then:
 - place [config](etc/xautocfg.cfg) in ~/.config/xautocfg.cfg
 - run `xautocfg` manually or:
-- enable/use the systemd service:
+- enable/use the systemd user service (which needs `graphical-session.target`!):
   - `systemctl --user enable xautocfg.service`
   - `systemctl --user start xautocfg.service`
 
@@ -36,7 +37,7 @@ Then:
 The `systemd` service binds to the `graphical-session.target` which is started by your desktop environment.
 Some window managers (e.g. i3 in 2022) don't start `graphical-session.target`, so you need custom user service files.
 
-As an example, these files are needed for [`i3`](https://i3wm.org/) as long as it doesn't start the target on its own.
+As an example, these files are needed for [i3](https://i3wm.org/) as long as it doesn't start the target on its own.
 
 `~/.config/systemd/user/i3-session.service`:
 ```systemd
@@ -81,7 +82,7 @@ it remains to be solved how we can reliably stop `i3-session.service` once i3 ha
 
 ## Alternative setup ideas
 
-As alternative to this tool, you can set some defaults for the x-server at startup, or in the `xorg.conf...` file:
+As alternative to this tool, you can set defaults for the X Server at startup.
 - For the keyboard repeat rate:
 ```
 X -ardelay 200 -arinterval 20  # (interval is 1000/rate_in_hz)
