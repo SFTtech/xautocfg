@@ -1,7 +1,21 @@
-CXX:=g++
-CXXFLAGS:=-O3
+# build script for xautocfg
+#
+# sorry, this is not cmake yet.
 
-LIBS=-lX11 -lXi
+CXXFLAGS ?= -O3 -march=native
 
-xautocfg: xautocfg.cpp
-	${CXX} -std=c++20 -Wall -Wextra -pedantic ${CXXFLAGS} ${LIBS} $^ -o $@
+BUILDFLAGS = -std=c++20 -Wall -Wextra -pedantic
+LIBS = -lX11 -lXi
+
+all: xautocfg
+
+xautocfg: xautocfg.o
+	${CXX} ${BUILDFLAGS} ${CXXFLAGS} ${LIBS} $^ -o $@
+
+%.o: %.cpp
+	${CXX} -c ${BUILDFLAGS} ${CXXFLAGS} $^ -o $@
+
+
+.PHONY: clean
+clean:
+	rm -f xautocfg
