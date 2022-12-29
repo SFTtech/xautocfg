@@ -7,18 +7,7 @@ Features:
   When a new keyboard is connected and used by X11, configure its repeat rate to desired values.
 
 
-# Alternative setup ideas
-
-As alternative to this tool, you can set some defaults for the x-server at startup, or in the `xorg.conf...` file:
-- For the keyboard repeat rate:
-```
-X -ardelay 200 -arinterval 20  # (interval is 1000/rate_in_hz)
-```
-
-For this to configure, you need the privileges to edit X launch properties (probably in your login tool like `lightdm`).
-
-
-# Setup
+## Setup
 
 ### installation
 
@@ -89,6 +78,16 @@ exec --no-startup-id systemctl start --user i3-session.service
 ```
 
 it remains to be solved how we can reliably stop `i3-session.service` once i3 has exited.
+
+## Alternative setup ideas
+
+As alternative to this tool, you can set some defaults for the x-server at startup, or in the `xorg.conf...` file:
+- For the keyboard repeat rate:
+```
+X -ardelay 200 -arinterval 20  # (interval is 1000/rate_in_hz)
+```
+
+For this to configure, you need the privileges to edit X launch properties (probably in your login tool like `lightdm`).
 
 
 ## License
