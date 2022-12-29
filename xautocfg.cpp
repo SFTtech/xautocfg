@@ -105,7 +105,7 @@ config parse_config(const std::string &filename) {
 
 
 int main() {
-	// TODO: argparse or read config from .config/xautocfg.conf
+	// TODO: argparsing?
 
 	std::ostringstream cfgpath;
 	const char *home = std::getenv("HOME");
