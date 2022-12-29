@@ -89,6 +89,12 @@ X -ardelay 200 -arinterval 20  # (interval is 1000/rate_in_hz)
 
 For this to configure, you need the privileges to edit X launch properties (probably in your login tool like `lightdm`).
 
+## Contact
+
+Please join our matrix room: `#sfttech:matrix.org`!
+
+For bug reports and patches, please create issues and pull requests at https://github.com/SFTtech/xautocfg
+
 
 ## License
 
