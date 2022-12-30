@@ -13,7 +13,7 @@ xautocfg: xautocfg.o
 	${CXX} ${BUILDFLAGS} ${CXXFLAGS} ${LIBS} $^ -o $@
 
 %.o: %.cpp
-	${CXX} -c ${BUILDFLAGS} ${CXXFLAGS} $^ -o $@
+	${CXX} ${BUILDFLAGS} ${CXXFLAGS} -c $^ -o $@
 
 
 .PHONY: clean

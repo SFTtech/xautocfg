@@ -6,15 +6,17 @@
  * GPLv3 or later.
  */
 
+#include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <regex>
 #include <stdexcept>
+#include <stdexcept>
 #include <string>
-#include <algorithm>
 #include <string_view>
-#include <cstdlib>
+#include <getopt.h>
 
 #include <X11/XKBlib.h>
 #include <X11/Xlib.h>
@@ -25,51 +27,130 @@
 
 using namespace std::literals;
 
+struct args {
+	std::string config;
+	bool custom_config = false;
+};
+
+args parse_args(int argc, char** argv) {
+	args ret;
+
+	int c;
+
+	while (1) {
+		int option_index = 0;
+		static struct option long_options[] = {
+			{"help",    no_argument,       0, 'h'},
+			{"config",  required_argument, 0, 'c'},
+			{0,         0,                 0,  0 }
+		};
+
+		c = getopt_long(argc, argv, "c:h",
+		                long_options, &option_index);
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 'h':
+			std::cout << "usage: " << argv[0]
+			          << " [--help] [-c config_file]" << std::endl;
+			exit(0);
+			break;
+
+		case 'c':
+			ret.config = std::string{optarg};
+			ret.custom_config = true;
+			break;
+		}
+	}
+
+	if (optind < argc) {
+		std::cout << "invalid non-option arguments" << std::endl;
+		exit(1);
+	}
+
+	// set defaults
+	if (not ret.config.size()) {
+		std::ostringstream cfgpathss;
+		const char *home = std::getenv("HOME");
+		if (not home) {
+			std::cout << "HOME env not set, can't locate config." << std::endl;
+			exit(1);
+		}
+		cfgpathss << home << "/.config/xautocfg.cfg";
+		ret.config = std::move(cfgpathss).str();
+	}
+
+	return ret;
+}
+
+
 struct config {
-	uint32_t delay = 200;
-	uint32_t interval = 20;
+	struct keyboard {
+		uint32_t delay = 200;
+		uint32_t interval = 20;
+	} keyboard;
+};
+
+enum class config_section {
+	none,
+	keyboard,
 };
 
 
 void parse_config_entry(config *config,
+                        config_section section,
                         const std::string& key,
                         const std::string& val) {
 	std::istringstream vals{val};
 
-	if (key == "delay"sv) {
-		vals >> config->delay;
-	}
-	else if (key == "rate"sv) {
-		uint32_t rate;
-		vals >> rate;
-		// xserver wants the repeat-interval in ms,
-		// but xset r rate delay repeat rate,
-		// so interval = 1000Hz / rate
-		config->interval = 1000.f / rate;
+	if (section == config_section::keyboard) {
+		if (key == "delay"sv) {
+			vals >> config->keyboard.delay;
+		}
+		else if (key == "rate"sv) {
+			uint32_t rate;
+			vals >> rate;
+			// xserver wants the repeat-interval in ms,
+			// but xset r rate delay repeat rate,
+			// so interval = 1000Hz / rate
+			config->keyboard.interval = 1000.f / rate;
+		}
+	} else if (section == config_section::none) {
+		std::cout << "not in a config section: "
+		          << key << " = " << val << std::endl;
+		exit(1);
+	} else {
+		throw std::logic_error{"unknown config section"};
 	}
 }
 
 
-config parse_config(const std::string &filename) {
+config parse_config(const args &args) {
 	config ret{};
 
-	std::ifstream file{filename, std::ios::binary};
+	std::ifstream file{args.config, std::ios::binary};
 	if (not file.is_open()) {
-		std::cout << "failed to open " << filename << "!\n"
-		          << "using default config." << std::endl;
+		std::cout << "failed to open config file '" << args.config << "'!" << std::endl;
+		if (args.custom_config) {
+			exit(1);
+		}
+		std::cout << "using default config." << std::endl;
 		return ret;
 	}
 
-	const std::regex comment_re("^([^#]*)#?.*");
-	const std::regex kv_re("^ *([^= ]+) *= *([^ ]+) *");
-	std::smatch comment_match;
-	std::smatch kv_match;
+
+	const std::regex comment_re("^ *([^#]*) *#?.*");
+	const std::regex section_re("^\\[([^\\]]+)\\]$");
+	const std::regex kv_re("^([^= ]+) *= *([^ /]+)$");
+	config_section current_secion = config_section::none;
 
 	std::string fullline{};
 	int linenr = 0;
 	while (std::getline(file, fullline)) {
 		linenr += 1;
 		// filter comments
+		std::smatch comment_match;
 		std::regex_match(fullline, comment_match, comment_re);
 		if (not comment_match.ready() or comment_match.size() != 2) {
 			std::cout << "error in config file line " << linenr << ":\n"
@@ -86,38 +167,52 @@ config parse_config(const std::string &filename) {
 			continue;
 		}
 
-		// parse 'key = value'
-		std::regex_match(line, kv_match, kv_re);
-		if (not kv_match.ready() or kv_match.size() != 3) {
-			std::cout << "invalid syntax in line " << linenr << ":\n"
-			          << fullline << std::endl;
-			exit(1);
+		// parse '[section]'
+		{
+			std::smatch match;
+			std::regex_match(line, match, section_re);
+			if (match.ready() and match.size() == 2) {
+				const std::string& section_name{match[1]};
+				if (section_name == "keyboard") {
+					current_secion = config_section::keyboard;
+				}
+				else {
+					std::cout << "unknown section name: " << fullline << std::endl;
+					exit(1);
+				}
+				continue;
+			}
 		}
 
-		const std::string& key{kv_match[1]};
-		const std::string& val{kv_match[2]};
+		// parse 'key = value'
+		{
+			std::smatch match;
+			std::regex_match(line, match, kv_re);
+			if (match.ready() and match.size() == 3) {
+				const std::string& key{match[1]};
+				const std::string& val{match[2]};
 
-		parse_config_entry(&ret, key, val);
+				parse_config_entry(&ret, current_secion, key, val);
+				continue;
+			}
+		}
+
+		std::cout << "invalid syntax in line " << linenr << ":\n"
+		          << fullline << std::endl;
+		exit(1);
 	}
 
 	return ret;
 }
 
 
-int main() {
-	// TODO: argparsing?
+int main(int argc, char **argv) {
+	args args = parse_args(argc, argv);
 
-	std::ostringstream cfgpath;
-	const char *home = std::getenv("HOME");
-	if (not home) {
-		std::cout << "HOME env not set, can't locate config." << std::endl;
-		exit(1);
-	}
-	cfgpath << home << "/.config/xautocfg.cfg";
-	config cfg = parse_config(cfgpath.str());
-	std::cout << "config: "
-	          << "delay=" << cfg.delay
-	          << ", interval=" << cfg.interval
+	config cfg = parse_config(args);
+	std::cout << "keyboard config: "
+	          << "delay=" << cfg.keyboard.delay
+	          << ", interval=" << cfg.keyboard.interval
 	          << std::endl;
 
 	std::cout << "connecting to x..." << std::endl;
@@ -134,7 +229,7 @@ int main() {
 		if (enabled) {
 			// we could use XkbUseCoreKbd as deviceid to always target the core
 			std::cout << "setting repeat rate on device=" << deviceid << std::endl;
-			XkbSetAutoRepeatRate(display, deviceid, cfg.delay, cfg.interval);
+			XkbSetAutoRepeatRate(display, deviceid, cfg.keyboard.delay, cfg.keyboard.interval);
 		}
 	};
 

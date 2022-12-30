@@ -1,0 +1,43 @@
+.TH XAUTOCFG 1
+.SH NAME
+xautocfg \- automatically apply X11 device settings
+.SH SYNOPSIS
+.B xautocfg
+.RI [ options ]
+.SH DESCRIPTION
+xautocfg is a daemon that can automatically set the key repeat rate to newly connected keyboards.
+.PP
+Usually, it's invoked as systemd user \fBxautocfg.service\fR, or from the user's \fB~/.xsession\fR file.
+.PP
+.PP
+Additional information can be found on the project's website:
+\fIhttps://github.com/SFTtech/xautocfg\fR
+.SH OPTIONS
+.TP
+\fB\-c\fR, \fB\-\-config\fR=\fIFILE\fR
+Load settings from \fIFILE\fR (default is \fB~/.config/xautocfg.cfg\fR).
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Display a help message and exit.
+.SH BUGS
+Report at \fIhttps://github.com/SFTtech/xautocfg/issues\fR
+.SH EXAMPLE
+Example content for \fBxautocfg.cfg\fR config file:
+.PP
+.nf
+# xautocfg config
+
+[keyboard]
+# set keyboard repeat rate for every keyboard automatically
+# equivalent one-time invocation:
+#     xset r rate 220 45
+
+# when to start repeating
+delay = 220
+
+# rate in hz for repetitions
+rate = 45
+.fi
+.SH AUTHOR
+xautocfg was written by Jonas Jelten <jj@sft.lol>.
+
