@@ -51,11 +51,26 @@ args parse_args(int argc, char** argv) {
 			break;
 
 		switch (c) {
-		case 'h':
-			std::cout << "usage: " << argv[0]
-			          << " [--help] [-c config_file]" << std::endl;
+		case 'h': {
+			std::cout << "usage: " << argv[0] << " [OPTION]...\n"
+			          << "\n"
+			          << "automatically set properties for newly connected X devices.\n"
+			          << "\n"
+			          << "Options:\n"
+			          << "   -h, --help                 show this help\n"
+			          << "   -c, --config=FILE          use this config file instead of ~/.config/xautocfg.cfg\n"
+			          << std::endl;
+
+			const option *op = nullptr;
+			for (size_t i = 0; ; op = &long_options[i++]) {
+				if (op->name == nullptr and op->has_arg == 0
+				    and op->flag == nullptr and op->val == 0) {
+					break;
+				}
+			}
 			exit(0);
 			break;
+		}
 
 		case 'c':
 			ret.config = std::string{optarg};
