@@ -82,6 +82,7 @@ it remains to be solved how we can reliably stop `i3-session.service` once i3 ha
 
 ## Alternative setup ideas
 
+### XServer startup options
 As alternative to this tool, you can set defaults for the X Server at startup.
 - For the keyboard repeat rate:
 ```
@@ -89,6 +90,18 @@ X -ardelay 200 -arinterval 20  # (interval is 1000/rate_in_hz)
 ```
 
 For this to configure, you need the privileges to edit X launch properties (probably in your login tool like `lightdm`).
+
+### XServer configuration file
+XServer since version [21.1.0](https://cgit.freedesktop.org/xorg/xserver/commit/?id=4f95d87d66b6a6e11aa8616c9242e0907ffee66b) supports the option `AutoRepeat`.
+Basically you need an xorg config section like this (the second value again `1000/rate_in_hz`):
+
+```
+Section "InputClass"
+    Identifier "system-keyboard"
+    MatchIsKeyboard "on"
+    Option "AutoRepeat" "200 20"
+EndSection
+```
 
 ## Contact
 
