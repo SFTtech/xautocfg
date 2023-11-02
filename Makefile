@@ -10,7 +10,7 @@ LIBS = -lX11 -lXi
 all: xautocfg
 
 xautocfg: xautocfg.o
-	${CXX} ${BUILDFLAGS} ${CXXFLAGS} ${LIBS} $^ -o $@
+	${CXX} ${BUILDFLAGS} ${CXXFLAGS} $^ ${LIBS} -o $@
 
 %.o: %.cpp
 	${CXX} ${BUILDFLAGS} ${CXXFLAGS} -c $^ -o $@
