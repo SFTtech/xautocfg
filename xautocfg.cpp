@@ -31,6 +31,20 @@ struct args {
 	bool custom_config = false;
 };
 
+std::string expandTilde(const std::string& path) {
+    if (path.empty() || path[0] != '~') {
+        return path;
+    }
+    const char* homeDir = std::getenv("HOME");
+    if (!homeDir) {
+        std::cerr << "HOME environment variable not set." << std::endl;
+        return path;
+    }
+    std::string expandedPath = homeDir;
+    expandedPath += path.substr(1);
+    return expandedPath;
+}
+
 args parse_args(int argc, char** argv) {
 	args ret;
 
@@ -104,11 +118,16 @@ struct config {
 		uint32_t delay = 200;
 		uint32_t interval = 20;
 	} keyboard;
+	struct scripts {
+		std::string on_enable = "";
+		std::string on_disable = "";
+	} scripts;
 };
 
 enum class config_section {
 	none,
 	keyboard,
+	scripts,
 };
 
 
@@ -129,6 +148,13 @@ void parse_config_entry(config *config,
 			// but xset r rate delay repeat rate,
 			// so interval = 1000Hz / rate
 			config->keyboard.interval = 1000.f / rate;
+		}
+	} else if (section == config_section::scripts) {
+		if (key == "on_enable"sv) {
+			config->scripts.on_enable = expandTilde(vals.str());
+		}
+		else if (key == "on_disable"sv) {
+			 config->scripts.on_disable = expandTilde(vals.str());
 		}
 	} else if (section == config_section::none) {
 		std::cout << "not in a config section: "
@@ -156,8 +182,8 @@ config parse_config(const args &args) {
 
 	const std::regex comment_re("^ *([^#]*) *#?.*");
 	const std::regex section_re("^\\[([^\\]]+)\\]$");
-	const std::regex kv_re("^([^= ]+) *= *([^ /]+)$");
-	config_section current_secion = config_section::none;
+	const std::regex kv_re("^([^= ]+) *= *([^ ]+)$");
+	config_section current_section = config_section::none;
 
 	std::string fullline{};
 	int linenr = 0;
@@ -188,7 +214,9 @@ config parse_config(const args &args) {
 			if (match.ready() and match.size() == 2) {
 				const std::string& section_name{match[1]};
 				if (section_name == "keyboard") {
-					current_secion = config_section::keyboard;
+					current_section = config_section::keyboard;
+				} else if (section_name == "scripts") {
+					current_section = config_section::scripts;
 				}
 				else {
 					std::cout << "unknown section name: " << fullline << std::endl;
@@ -206,7 +234,7 @@ config parse_config(const args &args) {
 				const std::string& key{match[1]};
 				const std::string& val{match[2]};
 
-				parse_config_entry(&ret, current_secion, key, val);
+				parse_config_entry(&ret, current_section, key, val);
 				continue;
 			}
 		}
@@ -227,6 +255,9 @@ int main(int argc, char **argv) {
 	std::cout << "keyboard config: "
 	          << "delay=" << cfg.keyboard.delay
 	          << ", interval=" << cfg.keyboard.interval
+	          << "; scripts config: "
+	          << "on_enable=" << cfg.scripts.on_enable
+	          << ", on_disable=" << cfg.scripts.on_disable
 	          << std::endl;
 
 	std::cout << "connecting to x..." << std::endl;
@@ -244,6 +275,22 @@ int main(int argc, char **argv) {
 			// we could use XkbUseCoreKbd as deviceid to always target the core
 			std::cout << "setting repeat rate on device=" << deviceid << std::endl;
 			XkbSetAutoRepeatRate(display, deviceid, cfg.keyboard.delay, cfg.keyboard.interval);
+		}
+	};
+
+	auto execute_script = [&](int deviceid, bool enabled) {
+		if (enabled && !cfg.scripts.on_enable.empty()) {
+			std::cout << "executing custom script for enabled device=" << deviceid << std::endl;
+			int ret = system(cfg.scripts.on_enable.c_str());
+			if (ret != 0) {
+				std::cerr << "on_enable script failed: " << cfg.scripts.on_enable << ", exit code: " << ret << std::endl;
+			}
+		} else if (!cfg.scripts.on_disable.empty()) {
+			std::cout << "executing custom script for[] disabled device=" << deviceid << std::endl;
+			int ret = system(cfg.scripts.on_disable.c_str());
+			if (ret != 0) {
+				std::cerr << "on_disable script failed: " << cfg.scripts.on_disable << ", exit code: " << ret << std::endl;
+			}
 		}
 	};
 
@@ -282,9 +329,11 @@ int main(int argc, char **argv) {
 					if (hier->use == XISlaveKeyboard) {
 						if (hier->flags & XIDeviceEnabled) {
 							action(hier->deviceid, true);
+							execute_script(hier->deviceid, true);
 						}
 						if (hier->flags & XIDeviceDisabled) {
 							action(hier->deviceid, false);
+							execute_script(hier->deviceid, false);
 						}
 					}
 				}
