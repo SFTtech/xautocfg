@@ -2,6 +2,8 @@
 #
 # sorry, this is not cmake yet.
 
+PREFIX ?= /usr/local
+
 CXXFLAGS ?= -O3 -march=native
 
 BUILDFLAGS = -std=c++20 -Wall -Wextra -pedantic
