@@ -1,21 +1,25 @@
 /**
  * automatically set x keyboard repeat rate whenever a new keyboard is detected.
  *
- * (c) 2022 Jonas Jelten <jj@sft.lol>
+ * (c) 2022-2024 Jonas Jelten <jj@sft.lol>
  *
  * GPLv3 or later.
  */
 
 #include <algorithm>
 #include <cstdlib>
+#include <format>
 #include <fstream>
+#include <getopt.h>
 #include <iostream>
 #include <memory>
 #include <regex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <getopt.h>
+#include <unordered_map>
+#include <unistd.h>
+#include <sys/wait.h>
 
 #include <X11/XKBlib.h>
 #include <X11/Xlib.h>
@@ -26,24 +30,12 @@
 
 using namespace std::literals;
 
+
 struct args {
 	std::string config;
 	bool custom_config = false;
 };
 
-std::string expandTilde(const std::string& path) {
-    if (path.empty() || path[0] != '~') {
-        return path;
-    }
-    const char* homeDir = std::getenv("HOME");
-    if (!homeDir) {
-        std::cerr << "HOME environment variable not set." << std::endl;
-        return path;
-    }
-    std::string expandedPath = homeDir;
-    expandedPath += path.substr(1);
-    return expandedPath;
-}
 
 args parse_args(int argc, char** argv) {
 	args ret;
@@ -117,17 +109,14 @@ struct config {
 	struct keyboard {
 		uint32_t delay = 200;
 		uint32_t interval = 20;
+		std::string on_connect = "";
+		std::string on_disconnect = "";
 	} keyboard;
-	struct scripts {
-		std::string on_enable = "";
-		std::string on_disable = "";
-	} scripts;
 };
 
 enum class config_section {
 	none,
 	keyboard,
-	scripts,
 };
 
 
@@ -137,7 +126,8 @@ void parse_config_entry(config *config,
                         const std::string& val) {
 	std::istringstream vals{val};
 
-	if (section == config_section::keyboard) {
+	switch (section) {
+	case config_section::keyboard:
 		if (key == "delay"sv) {
 			vals >> config->keyboard.delay;
 		}
@@ -149,19 +139,21 @@ void parse_config_entry(config *config,
 			// so interval = 1000Hz / rate
 			config->keyboard.interval = 1000.f / rate;
 		}
-	} else if (section == config_section::scripts) {
-		if (key == "on_enable"sv) {
-			config->scripts.on_enable = expandTilde(vals.str());
+		else if (key == "on_connect"sv) {
+			config->keyboard.on_connect = val;
 		}
-		else if (key == "on_disable"sv) {
-			 config->scripts.on_disable = expandTilde(vals.str());
+		else if (key == "on_disconnect"sv) {
+			config->keyboard.on_disconnect = val;
 		}
-	} else if (section == config_section::none) {
+		else {
+			throw std::logic_error{std::format("unknown keyboard section entry: {}", key)};
+		}
+		break;
+	case config_section::none:
 		std::cout << "not in a config section: "
 		          << key << " = " << val << std::endl;
 		exit(1);
-	} else {
-		throw std::logic_error{"unknown config section"};
+		break;
 	}
 }
 
@@ -182,7 +174,7 @@ config parse_config(const args &args) {
 
 	const std::regex comment_re("^ *([^#]*) *#?.*");
 	const std::regex section_re("^\\[([^\\]]+)\\]$");
-	const std::regex kv_re("^([^= ]+) *= *([^ ]+)$");
+	const std::regex kv_re("^([^= ]+) *= *(.+)$");
 	config_section current_section = config_section::none;
 
 	std::string fullline{};
@@ -215,8 +207,6 @@ config parse_config(const args &args) {
 				const std::string& section_name{match[1]};
 				if (section_name == "keyboard") {
 					current_section = config_section::keyboard;
-				} else if (section_name == "scripts") {
-					current_section = config_section::scripts;
 				}
 				else {
 					std::cout << "unknown section name: " << fullline << std::endl;
@@ -248,6 +238,43 @@ config parse_config(const args &args) {
 }
 
 
+int exec_script(const std::string &command,
+                const std::unordered_map<std::string, std::string> &add_environment) {
+	pid_t pid = fork();
+
+	if (pid == -1) {
+		// failed to fork
+		std::cerr << "failed to fork for command " << command << std::endl;
+	}
+	else if (pid == 0) {
+		// in child process
+
+		// add new environment entries
+		for (auto &&entry : add_environment) {
+			setenv(entry.first.c_str(), entry.second.c_str(), true);
+		}
+
+		int ret = execlp("/bin/sh", "sh", "-c", command.c_str(), nullptr);
+		if (ret == -1) {
+			perror("failed to execute script");
+		}
+	}
+	else {
+		// in parent process
+		int status;
+		waitpid(pid, &status, 0);
+
+		if (WIFEXITED(status)) {
+			return WEXITSTATUS(status);
+		}
+		else {
+			return -1;
+		}
+	}
+	return -1;
+}
+
+
 int main(int argc, char **argv) {
 	args args = parse_args(argc, argv);
 
@@ -255,10 +282,9 @@ int main(int argc, char **argv) {
 	std::cout << "keyboard config: "
 	          << "delay=" << cfg.keyboard.delay
 	          << ", interval=" << cfg.keyboard.interval
-	          << "; scripts config: "
-	          << "on_enable=" << cfg.scripts.on_enable
-	          << ", on_disable=" << cfg.scripts.on_disable
-	          << std::endl;
+	          << ", on_connect='" << cfg.keyboard.on_connect
+	          << "', on_disconnect='" << cfg.keyboard.on_disconnect
+	          << "'" << std::endl;
 
 	std::cout << "connecting to x..." << std::endl;
 
@@ -270,7 +296,7 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	auto action = [&](int deviceid, bool enabled) {
+	auto set_kbd_repeat_rate = [&](int deviceid, bool enabled) {
 		if (enabled) {
 			// we could use XkbUseCoreKbd as deviceid to always target the core
 			std::cout << "setting repeat rate on device=" << deviceid << std::endl;
@@ -278,25 +304,28 @@ int main(int argc, char **argv) {
 		}
 	};
 
-	auto execute_script = [&](int deviceid, bool enabled) {
-		if (enabled && !cfg.scripts.on_enable.empty()) {
-			std::cout << "executing custom script for enabled device=" << deviceid << std::endl;
-			int ret = system(cfg.scripts.on_enable.c_str());
-			if (ret != 0) {
-				std::cerr << "on_enable script failed: " << cfg.scripts.on_enable << ", exit code: " << ret << std::endl;
-			}
-		} else if (!cfg.scripts.on_disable.empty()) {
-			std::cout << "executing custom script for[] disabled device=" << deviceid << std::endl;
-			int ret = system(cfg.scripts.on_disable.c_str());
-			if (ret != 0) {
-				std::cerr << "on_disable script failed: " << cfg.scripts.on_disable << ", exit code: " << ret << std::endl;
+	auto run_kbd_plug_script = [&](int deviceid, bool enabled) {
+		auto& command = enabled ? cfg.keyboard.on_connect : cfg.keyboard.on_disconnect;
+
+		if (not command.empty()) {
+			auto script_ret = exec_script(
+				command,
+				{{"XINPUTID", std::format("{}", deviceid)}});
+
+			if (script_ret != 0) {
+				std::cerr << "script failed: '" << command << "' exited with " << script_ret << std::endl;
 			}
 		}
 	};
 
+	auto handle_keyboard_plug = [&](int deviceid, bool enabled) {
+		set_kbd_repeat_rate(deviceid, enabled);
+		run_kbd_plug_script(deviceid, enabled);
+	};
+
 	// set rate at startup for core keyboard
-	std::cout << "setting rate to core keyboard" << std::endl;
-	action(XkbUseCoreKbd, true);
+	std::cout << "setting rate to core keyboard..." << std::endl;
+	set_kbd_repeat_rate(XkbUseCoreKbd, true);
 
 	{
 		XIEventMask mask;
@@ -328,12 +357,10 @@ int main(int argc, char **argv) {
 					XIHierarchyInfo *hier = &hev->info[i];
 					if (hier->use == XISlaveKeyboard) {
 						if (hier->flags & XIDeviceEnabled) {
-							action(hier->deviceid, true);
-							execute_script(hier->deviceid, true);
+							handle_keyboard_plug(hier->deviceid, true);
 						}
 						if (hier->flags & XIDeviceDisabled) {
-							action(hier->deviceid, false);
-							execute_script(hier->deviceid, false);
+							handle_keyboard_plug(hier->deviceid, false);
 						}
 					}
 				}

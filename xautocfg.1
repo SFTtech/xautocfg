@@ -37,6 +37,10 @@ delay = 220
 
 # rate in hz for repetitions
 rate = 45
+
+# execute when keyboards are plugged
+on_connect = echo plugged in $XINPUTID keyboard
+on_disconnect = echo ripped out $XINPUTID keyboard
 .fi
 .SH AUTHOR
 xautocfg was written by Jonas Jelten <jj@sft.lol>.
