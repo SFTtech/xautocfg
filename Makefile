@@ -3,6 +3,7 @@
 # sorry, this is not cmake yet.
 
 PREFIX ?= /usr/local
+MANPREFIX ?= ${PREFIX}/share/man
 
 CXXFLAGS ?= -O3 -march=native
 
