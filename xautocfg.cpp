@@ -81,13 +81,20 @@ args parse_args(int argc, char **argv) {
 	// set defaults
 	if (not ret.config.size()) {
 		std::ostringstream cfgpathss;
-		const char *home = std::getenv("HOME");
-		if (not home) {
-			std::cout << "HOME env not set, can't locate config." << std::endl;
-			exit(1);
+		const char *xdg_config = std::getenv("XDG_CONFIG_HOME");
+		if (xdg_config) {
+			cfgpathss << xdg_config << "/xautocfg.cfg";
+			ret.config = std::move(cfgpathss).str();
 		}
-		cfgpathss << home << "/.config/xautocfg.cfg";
-		ret.config = std::move(cfgpathss).str();
+		else {
+			const char *home = std::getenv("HOME");
+			if (not home) {
+				std::cout << "HOME env not set, can't locate config." << std::endl;
+				exit(1);
+			}
+			cfgpathss << home << "/.config/xautocfg.cfg";
+			ret.config = std::move(cfgpathss).str();
+		}
 	}
 
 	return ret;
