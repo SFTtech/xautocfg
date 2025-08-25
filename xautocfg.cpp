@@ -7,26 +7,16 @@
  */
 
 #include <algorithm>
-#include <cstdlib>
 #include <format>
 #include <fstream>
 #include <getopt.h>
 #include <iostream>
-#include <memory>
 #include <regex>
-#include <stdexcept>
-#include <string>
-#include <string_view>
 #include <unordered_map>
-#include <unistd.h>
 #include <sys/wait.h>
 
 #include <X11/XKBlib.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/extensions/XI2.h>
 #include <X11/extensions/XInput2.h>
-#include <X11/extensions/XKB.h>
 
 using namespace std::literals;
 
@@ -37,7 +27,7 @@ struct args {
 };
 
 
-args parse_args(int argc, char** argv) {
+args parse_args(int argc, char **argv) {
 	args ret;
 
 	int c;
@@ -63,8 +53,7 @@ args parse_args(int argc, char** argv) {
 			          << "\n"
 			          << "Options:\n"
 			          << "   -h, --help                 show this help\n"
-			          << "   -c, --config=FILE          use this config file instead of ~/.config/xautocfg.cfg\n"
-			          << std::endl;
+			          << "   -c, --config=FILE          use this config file instead of ~/.config/xautocfg.cfg\n";
 
 			const option *op = nullptr;
 			for (size_t i = 0; ; op = &long_options[i++]) {
@@ -92,13 +81,20 @@ args parse_args(int argc, char** argv) {
 	// set defaults
 	if (not ret.config.size()) {
 		std::ostringstream cfgpathss;
-		const char *home = std::getenv("HOME");
-		if (not home) {
-			std::cout << "HOME env not set, can't locate config." << std::endl;
-			exit(1);
+		const char *xdg_config = std::getenv("XDG_CONFIG_HOME");
+		if (xdg_config) {
+			cfgpathss << xdg_config << "/xautocfg.cfg";
+			ret.config = std::move(cfgpathss).str();
 		}
-		cfgpathss << home << "/.config/xautocfg.cfg";
-		ret.config = std::move(cfgpathss).str();
+		else {
+			const char *home = std::getenv("HOME");
+			if (not home) {
+				std::cout << "HOME env not set, can't locate config." << std::endl;
+				exit(1);
+			}
+			cfgpathss << home << "/.config/xautocfg.cfg";
+			ret.config = std::move(cfgpathss).str();
+		}
 	}
 
 	return ret;
@@ -122,8 +118,8 @@ enum class config_section {
 
 void parse_config_entry(config *config,
                         config_section section,
-                        const std::string& key,
-                        const std::string& val) {
+                        const std::string &key,
+                        const std::string &val) {
 	std::istringstream vals{val};
 
 	switch (section) {
@@ -190,7 +186,7 @@ config parse_config(const args &args) {
 			exit(1);
 		}
 
-		const std::string& line{comment_match[1]};
+		const std::string &line{comment_match[1]};
 
 		// filter empty lines
 		if (line.size() == 0 or std::ranges::all_of(line, [](const char c) {
@@ -204,7 +200,7 @@ config parse_config(const args &args) {
 			std::smatch match;
 			std::regex_match(line, match, section_re);
 			if (match.ready() and match.size() == 2) {
-				const std::string& section_name{match[1]};
+				const std::string &section_name{match[1]};
 				if (section_name == "keyboard") {
 					current_section = config_section::keyboard;
 				}
@@ -221,8 +217,8 @@ config parse_config(const args &args) {
 			std::smatch match;
 			std::regex_match(line, match, kv_re);
 			if (match.ready() and match.size() == 3) {
-				const std::string& key{match[1]};
-				const std::string& val{match[2]};
+				const std::string &key{match[1]};
+				const std::string &val{match[2]};
 
 				parse_config_entry(&ret, current_section, key, val);
 				continue;
@@ -288,7 +284,7 @@ int main(int argc, char **argv) {
 
 	std::cout << "connecting to x..." << std::endl;
 
-	Display* display = XOpenDisplay(nullptr);
+	Display *display = XOpenDisplay(nullptr);
 
 	int firstevent, error, opcode;
 	if (!XQueryExtension(display, "XInputExtension", &opcode, &firstevent, &error)) {
@@ -305,7 +301,7 @@ int main(int argc, char **argv) {
 	};
 
 	auto run_kbd_plug_script = [&](int deviceid, bool enabled) {
-		auto& command = enabled ? cfg.keyboard.on_connect : cfg.keyboard.on_disconnect;
+		auto &command = enabled ? cfg.keyboard.on_connect : cfg.keyboard.on_disconnect;
 
 		if (not command.empty()) {
 			auto script_ret = exec_script(
