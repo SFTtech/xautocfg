@@ -7,26 +7,16 @@
  */
 
 #include <algorithm>
-#include <cstdlib>
 #include <format>
 #include <fstream>
 #include <getopt.h>
 #include <iostream>
-#include <memory>
 #include <regex>
-#include <stdexcept>
-#include <string>
-#include <string_view>
 #include <unordered_map>
-#include <unistd.h>
 #include <sys/wait.h>
 
 #include <X11/XKBlib.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/extensions/XI2.h>
 #include <X11/extensions/XInput2.h>
-#include <X11/extensions/XKB.h>
 
 using namespace std::literals;
 
