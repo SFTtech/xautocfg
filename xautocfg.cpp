@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sstream>
 
 #include <X11/XKBlib.h>
 #include <X11/Xlib.h>
